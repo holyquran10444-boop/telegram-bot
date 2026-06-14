@@ -61,11 +61,17 @@ def get_profile_text(user_id, name):
 
 def main_keyboard():
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("🛍️ تبادل Temu", callback_data="cat_temu")],
-        [InlineKeyboardButton("👗 تبادل Shein", callback_data="cat_shein")],
-        [InlineKeyboardButton("🌿 تبادل نعناع", callback_data="cat_naanaa")],
-        [InlineKeyboardButton("🔗 تبادل عام", callback_data="cat_general")],
+        [InlineKeyboardButton("🔄 ابدأ التبادل", callback_data="start_exchange")],
         [InlineKeyboardButton("📊 ملفي الشخصي", callback_data="profile")],
+    ])
+
+def category_keyboard():
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("🛍️ Temu", callback_data="cat_temu")],
+        [InlineKeyboardButton("👗 Shein", callback_data="cat_shein")],
+        [InlineKeyboardButton("🌿 نعناع", callback_data="cat_naanaa")],
+        [InlineKeyboardButton("🔗 عام", callback_data="cat_general")],
+        [InlineKeyboardButton("🔙 رجوع", callback_data="back_start")],
     ])
 
 def back_keyboard():
@@ -84,7 +90,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "🎁 تبادل روابط Temu وShein ونعناع مع أشخاص موثوقين!\n\n"
         "📤 شارك البوت مع أصدقائك:\n"
         "t.me/LinksSwap_bot\n\n"
-        "اختر نوع التبادل:",
+        "اختر من القائمة:",
         reply_markup=main_keyboard()
     )
 
@@ -97,8 +103,14 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data.clear()
         waiting_users.pop(user_id, None)
         await query.edit_message_text(
-            "👋 اختر نوع التبادل:",
+            "👋 اختر من القائمة:",
             reply_markup=main_keyboard()
+        )
+
+    elif query.data == "start_exchange":
+        await query.edit_message_text(
+            "🔄 اختر نوع التبادل:",
+            reply_markup=category_keyboard()
         )
 
     elif query.data.startswith("cat_"):
@@ -130,7 +142,6 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         stats = get_user_stats(user_id)
         stats["completed"] += 1
         active_exchanges.pop(user_id, None)
-
         rating_keyboard = InlineKeyboardMarkup([
             [
                 InlineKeyboardButton("⭐⭐⭐⭐⭐", callback_data=f"rate_5_{pid}"),
@@ -143,15 +154,11 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             [InlineKeyboardButton("⭐", callback_data=f"rate_1_{pid}")]
         ])
         await query.edit_message_text(
-            "✅ تم تسجيل إتمامك!\n\n"
-            "كيف تقيم شريكك؟",
+            "✅ تم تسجيل إتمامك!\n\nكيف تقيم شريكك؟",
             reply_markup=rating_keyboard
         )
         try:
-            await context.bot.send_message(
-                pid,
-                "✅ شريكك أكد إتمام التبادل! شكراً لك 🎉"
-            )
+            await context.bot.send_message(pid, "✅ شريكك أكد إتمام التبادل! شكراً لك 🎉")
         except Exception:
             pass
 
@@ -163,9 +170,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         pstats["total_rating"] += rating_value
         pstats["rating_count"] += 1
         await query.edit_message_text(
-            f"✅ تم تسجيل تقييمك!\n"
-            f"أعطيت {'⭐' * rating_value}\n\n"
-            f"شكراً لك! 🎉",
+            f"✅ تم تسجيل تقييمك!\nأعطيت {'⭐' * rating_value}\n\nشكراً لك! 🎉",
             reply_markup=back_keyboard()
         )
 
@@ -249,7 +254,6 @@ async def msg(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 f"بعد التبادل اضغط ✅",
                 reply_markup=kb1
             )
-
             await context.bot.send_message(
                 partner_id,
                 f"🎉 وجدنا لك شريكاً في {cat_name}!\n\n"
