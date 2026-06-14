@@ -1,3 +1,6 @@
+
+
+```python
 import logging
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, ContextTypes, filters
@@ -20,7 +23,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton("🔄 تبادل تلقائي", callback_data="auto")],
         [InlineKeyboardButton("📊 حالتي", callback_data="status")],
     ]
-    await update.message.reply_text("👋 مرحباً في بوت تبادل الروابط!\nاختر:", reply_markup=InlineKeyboardMarkup(keyboard))
+    await update.message.reply_text(
+        "👋 مرحباً في بوت تبادل الروابط!\nاختر:",
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
 
 async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -38,7 +44,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         active_exchanges.pop(user_id, None)
         try:
             await context.bot.send_message(pid, "✅ شريكك أكد إتمام التبادل!")
-        except:
+        except Exception:
             pass
     elif query.data.startswith("report_"):
         pid = int(query.data.split("_")[1])
@@ -51,7 +57,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             msg = "⚠️ تحذير: أتمم التبادل أو ستُحظر!"
         try:
             await context.bot.send_message(pid, msg)
-        except:
+        except Exception:
             pass
         await query.edit_message_text("✅ تم الإبلاغ.")
 
@@ -75,8 +81,15 @@ async def msg(update: Update, context: ContextTypes.DEFAULT_TYPE):
             active_exchanges[partner_id] = user_id
             kb1 = [[InlineKeyboardButton("✅ أكملت", callback_data=f"done_{partner_id}"), InlineKeyboardButton("🚨 إبلاغ", callback_data=f"report_{partner_id}")]]
             kb2 = [[InlineKeyboardButton("✅ أكملت", callback_data=f"done_{user_id}"), InlineKeyboardButton("🚨 إبلاغ", callback_data=f"report_{user_id}")]]
-            await update.message.reply_text(f"🎉 وجدنا شريكاً!\n👤 {pdata['name']}\n🔗 {pdata['link']}", reply_markup=InlineKeyboardMarkup(kb1))
-            await context.bot.send_message(partner_id, f"🎉 وجدنا شريكاً!\n👤 {update.effective_user.first_name}\n🔗 {text}", reply_markup=InlineKeyboardMarkup(kb2))
+            await update.message.reply_text(
+                f"🎉 وجدنا شريكاً!\n👤 {pdata['name']}\n🔗 {pdata['link']}",
+                reply_markup=InlineKeyboardMarkup(kb1)
+            )
+            await context.bot.send_message(
+                partner_id,
+                f"🎉 وجدنا شريكاً!\n👤 {update.effective_user.first_name}\n🔗 {text}",
+                reply_markup=InlineKeyboardMarkup(kb2)
+            )
         else:
             await update.message.reply_text("⏳ تم حفظ رابطك! ننتظر شريكاً...")
 
@@ -85,7 +98,8 @@ def main():
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CallbackQueryHandler(button))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, msg))
-    app.run_polling()
+    app.run_polling(drop_pending_updates=True)
 
 if __name__ == "__main__":
     main()
+```
