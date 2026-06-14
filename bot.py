@@ -1,4 +1,3 @@
-
 import logging
 from datetime import datetime
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
@@ -60,26 +59,33 @@ def get_profile_text(user_id, name):
         f"🌟 التقييم: {rating}/5"
     )
 
+def main_keyboard():
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("🛍️ تبادل Temu", callback_data="cat_temu")],
+        [InlineKeyboardButton("👗 تبادل Shein", callback_data="cat_shein")],
+        [InlineKeyboardButton("🌿 تبادل نعناع", callback_data="cat_naanaa")],
+        [InlineKeyboardButton("🔗 تبادل عام", callback_data="cat_general")],
+        [InlineKeyboardButton("📊 ملفي الشخصي", callback_data="profile")],
+    ])
+
+def back_keyboard():
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("🔄 ابدأ تبادل جديد", callback_data="back_start")]
+    ])
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     if user_id in banned_users:
         await update.message.reply_text("🚫 أنت محظور من استخدام البوت.")
         return
     get_user_stats(user_id)
-    keyboard = [
-        [InlineKeyboardButton("🛍️ تبادل Temu", callback_data="cat_temu")],
-        [InlineKeyboardButton("👗 تبادل Shein", callback_data="cat_shein")],
-        [InlineKeyboardButton("🌿 تبادل نعناع", callback_data="cat_naanaa")],
-        [InlineKeyboardButton("🔗 تبادل عام", callback_data="cat_general")],
-        [InlineKeyboardButton("📊 ملفي الشخصي", callback_data="profile")],
-    ]
     await update.message.reply_text(
         "👋 مرحباً في بوت تبادل الروابط!\n\n"
         "🎁 تبادل روابط Temu وShein ونعناع مع أشخاص موثوقين!\n\n"
         "📤 شارك البوت مع أصدقائك:\n"
         "t.me/LinksSwap_bot\n\n"
         "اختر نوع التبادل:",
-        reply_markup=InlineKeyboardMarkup(keyboard)
+        reply_markup=main_keyboard()
     )
 
 async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -87,7 +93,15 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
     user_id = query.from_user.id
 
-    if query.data.startswith("cat_"):
+    if query.data == "back_start":
+        context.user_data.clear()
+        waiting_users.pop(user_id, None)
+        await query.edit_message_text(
+            "👋 اختر نوع التبادل:",
+            reply_markup=main_keyboard()
+        )
+
+    elif query.data.startswith("cat_"):
         cat = query.data.replace("cat_", "")
         context.user_data["mode"] = "waiting_link"
         context.user_data["category"] = cat
@@ -107,7 +121,8 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"{stars}\n"
             f"✅ تبادلات ناجحة: {stats['completed']}\n"
             f"🌟 تقييمك: {rating}/5\n"
-            f"⚠️ تحذيرات: {warnings}/2"
+            f"⚠️ تحذيرات: {warnings}/2",
+            reply_markup=back_keyboard()
         )
 
     elif query.data.startswith("done_"):
@@ -116,7 +131,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         stats["completed"] += 1
         active_exchanges.pop(user_id, None)
 
-        keyboard = [
+        rating_keyboard = InlineKeyboardMarkup([
             [
                 InlineKeyboardButton("⭐⭐⭐⭐⭐", callback_data=f"rate_5_{pid}"),
                 InlineKeyboardButton("⭐⭐⭐⭐", callback_data=f"rate_4_{pid}"),
@@ -126,11 +141,11 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 InlineKeyboardButton("⭐⭐", callback_data=f"rate_2_{pid}"),
             ],
             [InlineKeyboardButton("⭐", callback_data=f"rate_1_{pid}")]
-        ]
+        ])
         await query.edit_message_text(
             "✅ تم تسجيل إتمامك!\n\n"
             "كيف تقيم شريكك؟",
-            reply_markup=InlineKeyboardMarkup(keyboard)
+            reply_markup=rating_keyboard
         )
         try:
             await context.bot.send_message(
@@ -149,7 +164,9 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         pstats["rating_count"] += 1
         await query.edit_message_text(
             f"✅ تم تسجيل تقييمك!\n"
-            f"أعطيت {'⭐' * rating_value}"
+            f"أعطيت {'⭐' * rating_value}\n\n"
+            f"شكراً لك! 🎉",
+            reply_markup=back_keyboard()
         )
 
     elif query.data.startswith("report_"):
@@ -168,7 +185,10 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await context.bot.send_message(pid, msg)
         except Exception:
             pass
-        await query.edit_message_text("✅ تم الإبلاغ. سيتم اتخاذ الإجراء اللازم.")
+        await query.edit_message_text(
+            "✅ تم الإبلاغ. سيتم اتخاذ الإجراء اللازم.",
+            reply_markup=back_keyboard()
+        )
 
 async def msg(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
@@ -212,14 +232,14 @@ async def msg(update: Update, context: ContextTypes.DEFAULT_TYPE):
             p_profile = get_profile_text(partner_id, pdata["name"])
             my_profile = get_profile_text(user_id, user.first_name)
 
-            kb1 = [[
+            kb1 = InlineKeyboardMarkup([[
                 InlineKeyboardButton("✅ أكملت التبادل", callback_data=f"done_{partner_id}"),
                 InlineKeyboardButton("🚨 إبلاغ", callback_data=f"report_{partner_id}")
-            ]]
-            kb2 = [[
+            ]])
+            kb2 = InlineKeyboardMarkup([[
                 InlineKeyboardButton("✅ أكملت التبادل", callback_data=f"done_{user_id}"),
                 InlineKeyboardButton("🚨 إبلاغ", callback_data=f"report_{user_id}")
-            ]]
+            ]])
 
             await update.message.reply_text(
                 f"🎉 وجدنا لك شريكاً في {cat_name}!\n\n"
@@ -227,7 +247,7 @@ async def msg(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 f"💬 تواصل معه: {pdata['username']}\n\n"
                 f"📌 اتفقا وتبادلا الروابط في الخاص!\n"
                 f"بعد التبادل اضغط ✅",
-                reply_markup=InlineKeyboardMarkup(kb1)
+                reply_markup=kb1
             )
 
             await context.bot.send_message(
@@ -237,13 +257,14 @@ async def msg(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 f"💬 تواصل معه: {username}\n\n"
                 f"📌 اتفقا وتبادلا الروابط في الخاص!\n"
                 f"بعد التبادل اضغط ✅",
-                reply_markup=InlineKeyboardMarkup(kb2)
+                reply_markup=kb2
             )
         else:
             await update.message.reply_text(
                 f"⏳ أنت الآن في قائمة الانتظار لـ {cat_name}\n\n"
                 f"🟢 حالتك: نشط\n"
-                f"سنخبرك فوراً عند وجود شريك! 🔔"
+                f"سنخبرك فوراً عند وجود شريك! 🔔",
+                reply_markup=back_keyboard()
             )
 
 def main():
