@@ -4,21 +4,16 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, ContextTypes, filters
 
 TOKEN = "8797984674:AAG6A0mnr8COBny1_J6MS7CjraFj8kuQkzc"
+ADMIN_ID = 605635405
 
 waiting_users = {}
 active_exchanges = {}
 user_warnings = {}
 banned_users = set()
 user_stats = {}
+all_users = set()
 
 logging.basicConfig(level=logging.INFO)
-
-CATEGORIES = {
-    "temu": "🛍️ Temu",
-    "shein": "👗 Shein",
-    "naanaa": "🌿 نعناع",
-    "general": "🔗 عام"
-}
 
 def get_stars(rating):
     if rating >= 4.5:
@@ -47,31 +42,26 @@ def get_rating(user_id):
         return 5.0
     return round(stats["total_rating"] / stats["rating_count"], 1)
 
-def get_profile_text(user_id, name):
+def get_profile_text(user_id, name, username):
     stats = get_user_stats(user_id)
     rating = get_rating(user_id)
     stars = get_stars(rating)
     completed = stats["completed"]
     return (
-        f"👤 {name}\n"
+        f"👤 الاسم: {name}\n"
+        f"💬 يوزره: {username}\n"
         f"{stars}\n"
-        f"✅ التبادلات الناجحة: {completed}\n"
-        f"🌟 التقييم: {rating}/5"
+        f"✅ تبادلات ناجحة: {completed}\n"
     )
 
 def main_keyboard():
+    waiting_count = len(waiting_users)
+    waiting_text = f"🟢 منتظرون الآن: {waiting_count}" if waiting_count > 0 else "🔴 لا يوجد منتظرون الآن"
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("🔄 ابدأ التبادل", callback_data="start_exchange")],
         [InlineKeyboardButton("📊 ملفي الشخصي", callback_data="profile")],
-    ])
-
-def category_keyboard():
-    return InlineKeyboardMarkup([
-        [InlineKeyboardButton("🛍️ Temu", callback_data="cat_temu")],
-        [InlineKeyboardButton("👗 Shein", callback_data="cat_shein")],
-        [InlineKeyboardButton("🌿 نعناع", callback_data="cat_naanaa")],
-        [InlineKeyboardButton("🔗 عام", callback_data="cat_general")],
-        [InlineKeyboardButton("🔙 رجوع", callback_data="back_start")],
+        [InlineKeyboardButton("📢 شارك البوت مع أصدقائك", url="https://t.me/share/url?url=https://t.me/LinksSwap_bot&text=بوت تبادل الروابط 🎁")],
+        [InlineKeyboardButton(waiting_text, callback_data="waiting_count")],
     ])
 
 def back_keyboard():
@@ -81,6 +71,7 @@ def back_keyboard():
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
+    all_users.add(user_id)
     if user_id in banned_users:
         await update.message.reply_text("🚫 أنت محظور من استخدام البوت.")
         return
@@ -88,10 +79,20 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "👋 مرحباً في بوت تبادل الروابط!\n\n"
         "🎁 تبادل روابط Temu وShein ونعناع مع أشخاص موثوقين!\n\n"
-        "📤 شارك البوت مع أصدقائك:\n"
-        "t.me/LinksSwap_bot\n\n"
         "اختر من القائمة:",
         reply_markup=main_keyboard()
+    )
+
+async def stats_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    if user_id != ADMIN_ID:
+        return
+    await update.message.reply_text(
+        f"📊 إحصائيات البوت:\n\n"
+        f"👥 عدد المستخدمين: {len(all_users)}\n"
+        f"🚫 محظورون: {len(banned_users)}\n"
+        f"⏳ في الانتظار: {len(waiting_users)}\n"
+        f"🔄 تبادلات نشطة: {len(active_exchanges) // 2}"
     )
 
 async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -99,7 +100,14 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
     user_id = query.from_user.id
 
-    if query.data == "back_start":
+    if query.data == "waiting_count":
+        waiting_count = len(waiting_users)
+        await query.answer(
+            f"🟢 يوجد {waiting_count} شخص ينتظر الآن!" if waiting_count > 0 else "🔴 لا يوجد أحد ينتظر الآن",
+            show_alert=True
+        )
+
+    elif query.data == "back_start":
         context.user_data.clear()
         waiting_users.pop(user_id, None)
         await query.edit_message_text(
@@ -108,30 +116,20 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
     elif query.data == "start_exchange":
-        await query.edit_message_text(
-            "🔄 اختر نوع التبادل:",
-            reply_markup=category_keyboard()
-        )
-
-    elif query.data.startswith("cat_"):
-        cat = query.data.replace("cat_", "")
         context.user_data["mode"] = "waiting_link"
-        context.user_data["category"] = cat
-        cat_name = CATEGORIES.get(cat, "عام")
         await query.edit_message_text(
-            f"✅ اخترت: {cat_name}\n\n"
-            f"🔗 أرسل رابطك الآن:"
+            "🔗 أرسل رابطك الآن وسنجد لك شريكاً تلقائياً!"
         )
 
     elif query.data == "profile":
-        stats = get_user_stats(user_id)
+        stats_data = get_user_stats(user_id)
         rating = get_rating(user_id)
         stars = get_stars(rating)
         warnings = user_warnings.get(user_id, 0)
         await query.edit_message_text(
             f"📊 ملفك الشخصي:\n\n"
             f"{stars}\n"
-            f"✅ تبادلات ناجحة: {stats['completed']}\n"
+            f"✅ تبادلات ناجحة: {stats_data['completed']}\n"
             f"🌟 تقييمك: {rating}/5\n"
             f"⚠️ تحذيرات: {warnings}/2",
             reply_markup=back_keyboard()
@@ -139,8 +137,8 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     elif query.data.startswith("done_"):
         pid = int(query.data.split("_")[1])
-        stats = get_user_stats(user_id)
-        stats["completed"] += 1
+        stats_data = get_user_stats(user_id)
+        stats_data["completed"] += 1
         active_exchanges.pop(user_id, None)
         rating_keyboard = InlineKeyboardMarkup([
             [
@@ -199,6 +197,7 @@ async def msg(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     text = update.message.text
     user = update.effective_user
+    all_users.add(user_id)
 
     if user_id in banned_users:
         await update.message.reply_text("🚫 أنت محظور.")
@@ -209,22 +208,18 @@ async def msg(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("❌ أرسل رابطاً صحيحاً يبدأ بـ http")
             return
 
-        cat = context.user_data.get("category", "general")
-        cat_name = CATEGORIES.get(cat, "عام")
         username = f"@{user.username}" if user.username else "لا يوجد يوزر"
 
         waiting_users[user_id] = {
             "link": text,
             "name": user.first_name,
             "username": username,
-            "category": cat,
             "time": datetime.now()
         }
         context.user_data["mode"] = "waiting"
 
         partner_id = next(
-            (uid for uid, data in waiting_users.items()
-             if uid != user_id and data["category"] == cat),
+            (uid for uid in waiting_users if uid != user_id),
             None
         )
 
@@ -234,8 +229,8 @@ async def msg(update: Update, context: ContextTypes.DEFAULT_TYPE):
             active_exchanges[user_id] = partner_id
             active_exchanges[partner_id] = user_id
 
-            p_profile = get_profile_text(partner_id, pdata["name"])
-            my_profile = get_profile_text(user_id, user.first_name)
+            p_profile = get_profile_text(partner_id, pdata["name"], pdata["username"])
+            my_profile = get_profile_text(user_id, user.first_name, username)
 
             kb1 = InlineKeyboardMarkup([[
                 InlineKeyboardButton("✅ أكملت التبادل", callback_data=f"done_{partner_id}"),
@@ -247,36 +242,36 @@ async def msg(update: Update, context: ContextTypes.DEFAULT_TYPE):
             ]])
 
             await update.message.reply_text(
-                f"🎉 وجدنا لك شريكاً في {cat_name}!\n\n"
-                f"{p_profile}\n\n"
-                f"💬 تواصل معه: {pdata['username']}\n\n"
-                f"📌 اتفقا وتبادلا الروابط في الخاص!\n"
+                f"🎉 وجدنا لك شريكاً!\n\n"
+                f"{p_profile}\n"
+                f"📌 اتفقا وتبادلا الروابط في الخاص بمصداقية!\n"
                 f"بعد التبادل اضغط ✅",
                 reply_markup=kb1
             )
             await context.bot.send_message(
                 partner_id,
-                f"🎉 وجدنا لك شريكاً في {cat_name}!\n\n"
-                f"{my_profile}\n\n"
-                f"💬 تواصل معه: {username}\n\n"
-                f"📌 اتفقا وتبادلا الروابط في الخاص!\n"
+                f"🎉 وجدنا لك شريكاً!\n\n"
+                f"{my_profile}\n"
+                f"📌 اتفقا وتبادلا الروابط في الخاص بمصداقية!\n"
                 f"بعد التبادل اضغط ✅",
                 reply_markup=kb2
             )
         else:
             await update.message.reply_text(
-                f"⏳ أنت الآن في قائمة الانتظار لـ {cat_name}\n\n"
-                f"🟢 حالتك: نشط\n"
-                f"سنخبرك فوراً عند وجود شريك! 🔔",
+                "⏳ تم حفظ رابطك!\n\n"
+                "🟢 حالتك: نشط\n"
+                "سنخبرك فوراً عند وجود شريك! 🔔",
                 reply_markup=back_keyboard()
             )
 
 def main():
     app = Application.builder().token(TOKEN).build()
     app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("stats", stats_cmd))
     app.add_handler(CallbackQueryHandler(button))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, msg))
     app.run_polling(drop_pending_updates=True)
 
 if __name__ == "__main__":
     main()
+```
